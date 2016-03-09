@@ -7,7 +7,7 @@
     <name>Simple Stream</name>
     <groupId>com.tobedevoured.json</groupId>
     <artifactId>simplestream</artifactId>
-    <version>1.0</version>
+    <version>0.0.1</version>
     <url>https://github.com/mguymon/simple_stream</url>
     <description>
         A Simple streaming JSON parser.
