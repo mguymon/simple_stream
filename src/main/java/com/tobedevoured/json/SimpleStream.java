@@ -122,7 +122,7 @@ public class SimpleStream {
         this.callback = callback;
     }
 
-    public void streamFromUrl(String url) throws StreamException {
+    public void streamFromUrl(final String url, final Integer timeout) throws StreamException {
         logger.info("Streaming JSON from {}", url);
 
         CloseableHttpClient httpclient = HttpClients
@@ -131,8 +131,7 @@ public class SimpleStream {
                     new ConnectionKeepAliveStrategy() {
                         @Override
                         public long getKeepAliveDuration(HttpResponse response, HttpContext context) {
-                            // otherwise keep alive for 30 minutes
-                            return 30 * 60 * 1000;
+                            return timeout * 1000;
                         }
                     }
                 )
@@ -168,7 +167,7 @@ public class SimpleStream {
         }
     }
 
-    public List stream(String stream) throws StreamException {
+    public List stream(final String stream) throws StreamException {
         JSONParser parser = new JSONParser();
         JsonStreamHandler streamHandler = new JsonStreamHandler();
 

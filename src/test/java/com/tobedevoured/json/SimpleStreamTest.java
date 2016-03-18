@@ -70,7 +70,7 @@ public class SimpleStreamTest {
             }
         });
 
-        simpleStream.streamFromUrl("http://localhost:8089/test");
+        simpleStream.streamFromUrl("http://localhost:8089/test", 30);
 
         Map<String, Boolean> test = ImmutableMap.of("test", true);
         assertEquals(results, test);
