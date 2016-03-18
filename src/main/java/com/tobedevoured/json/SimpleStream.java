@@ -19,27 +19,20 @@ package com.tobedevoured.json;
  */
 
 import org.apache.http.*;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.conn.ConnectionKeepAliveStrategy;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicHeaderElementIterator;
-import org.apache.http.protocol.HTTP;
 import org.apache.http.protocol.HttpContext;
 import org.json.simple.parser.ContentHandler;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.impl.SimpleLogger;
-import org.slf4j.impl.SimpleLoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -207,7 +200,13 @@ public class SimpleStream {
             }
 
             if (callback != null) {
-                callback.apply(val);
+                logger.info("Executing callback with {}", val);
+                try {
+                    callback.apply(val);
+                } catch(Exception e) {
+                    logger.error("Failed to execute callback", e);
+                    throw new StreamException(e);
+                }
             }
 
             entities.add(val);
