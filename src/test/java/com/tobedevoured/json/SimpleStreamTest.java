@@ -18,9 +18,11 @@ package com.tobedevoured.json;
  * limitations under the License.
  */
 
+import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.google.common.collect.ImmutableMap;
 import org.json.simple.parser.ParseException;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 
 import java.util.*;
@@ -28,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static org.junit.Assert.*;
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
 /**
  * Created by mguymon on 3/8/16.
@@ -36,14 +39,45 @@ public class SimpleStreamTest {
 
     SimpleStream simpleStream;
 
+    @Rule
+    public WireMockRule wireMockRule = new WireMockRule(8089);
+
 
     @Before
     public void setup() {
         simpleStream = new SimpleStream();
     }
 
+
     @Test
-    public void testFragmentedStream() throws ParseException {
+    public void testStreamFromUrl() throws StreamException {
+        stubFor(get(urlEqualTo("/test"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "text/json")
+                        .withBody("{ \"test\": \n  true }")));
+
+        final Map results = new HashMap();
+        simpleStream.setCallback(new Function<Object, Object>() {
+
+            @Override
+            public Object apply(Object entity) {
+                assertNotNull(entity);
+
+                results.putAll((Map)entity);
+
+                return null;
+            }
+        });
+
+        simpleStream.streamFromUrl("http://localhost:8089/test");
+
+        Map<String, Boolean> test = ImmutableMap.of("test", true);
+        assertEquals(results, test);
+    }
+
+    @Test
+    public void testFragmentedStream() throws StreamException {
         List entities = simpleStream.stream("{\"test\": \"this is ");
         entities.addAll(simpleStream.stream("a test\"} [1,2,3]"));
 
@@ -54,14 +88,14 @@ public class SimpleStreamTest {
     }
 
     @Test
-    public void testEmptyStream() throws ParseException {
+    public void testEmptyStream() throws StreamException {
         List entities = simpleStream.stream("");
 
         assertEquals(new ArrayList<>(0), entities);
     }
 
     @Test
-    public void testCallback() throws ParseException {
+    public void testCallback() throws StreamException {
         final AtomicBoolean isCalledBack = new AtomicBoolean(false);
         simpleStream.setCallback(new Function<Object, Object>() {
 

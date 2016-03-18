@@ -18,20 +18,39 @@ package com.tobedevoured.json;
  * limitations under the License.
  */
 
+import org.apache.http.*;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.conn.ConnectionKeepAliveStrategy;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeaderElementIterator;
+import org.apache.http.protocol.HTTP;
+import org.apache.http.protocol.HttpContext;
 import org.json.simple.parser.ContentHandler;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.impl.SimpleLogger;
+import org.slf4j.impl.SimpleLoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
 public class SimpleStream {
 
+
+    private static final List EMPTY_LIST = new ArrayList();
     private static final Logger logger = LoggerFactory.getLogger(SimpleStream.class);
+
 
     class JsonStreamHandler implements ContentHandler {
 
@@ -39,6 +58,7 @@ public class SimpleStream {
 
         @Override
         public void startJSON() throws ParseException, IOException {
+
             logger.debug("startJson");
         }
 
@@ -56,8 +76,8 @@ public class SimpleStream {
 
         @Override
         public boolean endObject() throws ParseException, IOException {
-            openEntity--;
             logger.debug("endObject of {}", openEntity);
+            openEntity--;
             return openEntity > 0;
         }
 
@@ -80,8 +100,8 @@ public class SimpleStream {
 
         @Override
         public boolean endArray() throws ParseException, IOException {
-            openEntity--;
             logger.debug("endArray of {}", openEntity);
+            openEntity--;
             return openEntity > 0;
         }
 
@@ -102,7 +122,53 @@ public class SimpleStream {
         this.callback = callback;
     }
 
-    public List stream(String stream) throws ParseException {
+    public void streamFromUrl(String url) throws StreamException {
+        logger.info("Streaming JSON from {}", url);
+
+        CloseableHttpClient httpclient = HttpClients
+                .custom()
+                .setKeepAliveStrategy(
+                    new ConnectionKeepAliveStrategy() {
+                        @Override
+                        public long getKeepAliveDuration(HttpResponse response, HttpContext context) {
+                            // otherwise keep alive for 30 minutes
+                            return 30 * 60 * 1000;
+                        }
+                    }
+                )
+                .build();
+
+        HttpGet httpget = new HttpGet(url);
+
+        try {
+            CloseableHttpResponse response = httpclient.execute(httpget);
+
+            try {
+                HttpEntity entity = response.getEntity();
+                if (entity != null) {
+                    BufferedReader reader =
+                            new BufferedReader(new InputStreamReader(entity.getContent()));
+                    try {
+                        String line = null;
+                        while ((line = reader.readLine( )) != null) {
+                            logger.debug("Streaming line: {}", line);
+                            stream(line);
+                        }
+                    } finally {
+                        reader.close();
+                    }
+                }
+            } finally {
+                response.close();
+            }
+
+        } catch (Exception e) {
+            logger.error("Unexpected error", e);
+            throw new StreamException(e);
+        }
+    }
+
+    public List stream(String stream) throws StreamException {
         JSONParser parser = new JSONParser();
         JsonStreamHandler streamHandler = new JsonStreamHandler();
 
@@ -120,9 +186,9 @@ public class SimpleStream {
 
             try {
                 parser.parse(fragment, streamHandler);
-            } catch ( ParseException pe ) {
-                if (ParseException.ERROR_UNEXPECTED_TOKEN != pe.getErrorType()) {
-                    throw pe;
+            } catch (ParseException e) {
+                if (ParseException.ERROR_UNEXPECTED_TOKEN != e.getErrorType()) {
+                    throw new StreamException(e);
                 }
 
                 logger.debug("detected json fragment, buffering for the rest: {}", fragment);
@@ -132,8 +198,14 @@ public class SimpleStream {
             int currentPos = pos;
             pos = pos + parser.getPosition() + 1;
 
-            String jsonEntity = buffer.substring(currentPos, pos);
-            Object val = parser.parse(buffer.substring(currentPos, pos).trim());
+            Object val = null;
+            try {
+                val = parser.parse(buffer.substring(currentPos, pos).trim());
+                buffer.delete(currentPos, pos);
+                pos = 0;
+            } catch (ParseException e) {
+                throw new StreamException(e);
+            }
 
             if (callback != null) {
                 callback.apply(val);
@@ -142,12 +214,10 @@ public class SimpleStream {
             entities.add(val);
         }
 
-        reset();
-
         return entities;
     }
 
-    public static void main(String args[]) throws ParseException {
+    public static void main(String args[]) throws StreamException {
         SimpleStream stream = new SimpleStream();
         stream.stream("{\"test\": \"this is ");
         stream.stream("a test\"} [1,2,3]");
