@@ -20,6 +20,9 @@ package com.tobedevoured.json;
 
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.google.common.collect.ImmutableMap;
+import org.hamcrest.CoreMatchers;
+import org.hamcrest.Matcher;
+import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 import org.junit.Before;
 import org.junit.Rule;
@@ -29,6 +32,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.junit.Assert.*;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
@@ -77,14 +81,42 @@ public class SimpleStreamTest {
     }
 
     @Test
-    public void testFragmentedStream() throws StreamException {
+    public void testFragmentedString() throws StreamException {
         List entities = simpleStream.stream("{\"test\": \"this is ");
         entities.addAll(simpleStream.stream("a test\"} [1,2,3]"));
 
         Map<String, String> test = ImmutableMap.of("test", "this is a test");
-        assertEquals(entities.get(0), test);
+        assertEquals(test, entities.get(0));
 
-        assertEquals(entities.get(1), Arrays.asList(1L,2L,3L));
+        assertEquals( Arrays.asList(1L,2L,3L), entities.get(1));
+    }
+
+    @Test
+    public void testFragmentedArray() throws StreamException {
+        simpleStream.stream("{\"cursor\": \"123\", \"check\": [1,2");
+        List entities = simpleStream.stream(",3]}");
+
+        JSONObject map = ((JSONObject)entities.get(0));
+        assertEquals("123", map.get("cursor"));
+        assertThat(map.get("check"), (Matcher)hasItems(1L, 2L, 3L));
+    }
+
+    @Test
+    public void testFragmentedBoolean() throws StreamException {
+        simpleStream.stream("{\"cursor\": \"123\", \"starred\": fals");
+        List entities = simpleStream.stream("e}");
+
+        Map<String, Object> expectedEntity  = ImmutableMap.of("cursor", "123", "starred", false);
+        assertEquals(expectedEntity, entities.get(0));
+    }
+
+    @Test
+    public void testFragmentedInteger() throws StreamException {
+        simpleStream.stream("{\"cursor\": \"123\", \"amount\": 123");
+        List entities = simpleStream.stream("4}");
+
+        Map<String, Object> expectedEntity  = ImmutableMap.of("cursor", "123", "amount", 1234L);
+        assertEquals(expectedEntity, entities.get(0));
     }
 
     @Test

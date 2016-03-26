@@ -37,10 +37,12 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 
 public class SimpleStream {
 
 
+    private static final int[] IGNORED_PARSE_ERRORS = {ParseException.ERROR_UNEXPECTED_CHAR, ParseException.ERROR_UNEXPECTED_TOKEN};
     private static final List EMPTY_LIST = new ArrayList();
     private static final Logger logger = LoggerFactory.getLogger(SimpleStream.class);
 
@@ -179,7 +181,7 @@ public class SimpleStream {
             try {
                 parser.parse(fragment, streamHandler);
             } catch (ParseException e) {
-                if (ParseException.ERROR_UNEXPECTED_TOKEN != e.getErrorType()) {
+                if (IntStream.of(IGNORED_PARSE_ERRORS).noneMatch(error_type -> error_type == e.getErrorType())) {
                     throw new StreamException(e);
                 }
 
