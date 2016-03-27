@@ -18,99 +18,37 @@ package com.tobedevoured.json;
  * limitations under the License.
  */
 
-import org.apache.http.*;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.conn.ConnectionKeepAliveStrategy;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.protocol.HttpContext;
-import org.json.simple.parser.ContentHandler;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.IntStream;
 
 public class SimpleStream {
 
-
-    private static final int[] IGNORED_PARSE_ERRORS = {ParseException.ERROR_UNEXPECTED_CHAR, ParseException.ERROR_UNEXPECTED_TOKEN};
-    private static final List EMPTY_LIST = new ArrayList();
+    public static final int MAX_BUFFER_MALFORMED_FRAGMENTS = 1;
     private static final Logger logger = LoggerFactory.getLogger(SimpleStream.class);
-
-
-    class JsonStreamHandler implements ContentHandler {
-
-        int openEntity = 0;
-
-        @Override
-        public void startJSON() throws ParseException, IOException {
-
-            logger.debug("startJson");
-        }
-
-        @Override
-        public void endJSON() throws ParseException, IOException {
-            logger.debug("endJson");
-        }
-
-        @Override
-        public boolean startObject() throws ParseException, IOException {
-            openEntity++;
-            logger.debug("startObject of {}", openEntity);
-            return true;
-        }
-
-        @Override
-        public boolean endObject() throws ParseException, IOException {
-            logger.debug("endObject of {}", openEntity);
-            openEntity--;
-            return openEntity > 0;
-        }
-
-        @Override
-        public boolean startObjectEntry(String key) throws ParseException, IOException {
-            return true;
-        }
-
-        @Override
-        public boolean endObjectEntry() throws ParseException, IOException {
-            return true;
-        }
-
-        @Override
-        public boolean startArray() throws ParseException, IOException {
-            openEntity++;
-            logger.debug("startArray of {}", openEntity);
-            return true;
-        }
-
-        @Override
-        public boolean endArray() throws ParseException, IOException {
-            logger.debug("endArray of {}", openEntity);
-            openEntity--;
-            return openEntity > 0;
-        }
-
-        @Override
-        public boolean primitive(Object value) throws ParseException, IOException {
-            return true;
-        }
-    }
 
     StringBuilder buffer = new StringBuilder();
     Function<Object, Object> callback;
+    int malformedFragmentAttempts = 0;
 
     public void reset() {
         buffer = new StringBuilder();
+        malformedFragmentAttempts = 0;
     }
 
     public void setCallback(Function<Object, Object> callback) {
@@ -181,7 +119,16 @@ public class SimpleStream {
             try {
                 parser.parse(fragment, streamHandler);
             } catch (ParseException e) {
-                if (IntStream.of(IGNORED_PARSE_ERRORS).noneMatch(error_type -> error_type == e.getErrorType())) {
+
+                if (ParseException.ERROR_UNEXPECTED_CHAR == e.getErrorType()) {
+                    // Check if should wait for more streaming json before declaring it malformed
+                    if (malformedFragmentAttempts < MAX_BUFFER_MALFORMED_FRAGMENTS) {
+                        malformedFragmentAttempts++;
+                    } else {
+                        throw new StreamException(e);
+                    }
+
+                } else if (ParseException.ERROR_UNEXPECTED_TOKEN != e.getErrorType()) {
                     throw new StreamException(e);
                 }
 
@@ -189,9 +136,11 @@ public class SimpleStream {
                 return entities;
             }
 
+            // increment the position in the buffer
             int currentPos = pos;
             pos = pos + parser.getPosition() + 1;
 
+            // Create entity from buffer
             Object val = null;
             try {
                 val = parser.parse(buffer.substring(currentPos, pos).trim());
@@ -200,6 +149,9 @@ public class SimpleStream {
             } catch (ParseException e) {
                 throw new StreamException(e);
             }
+
+            // valid entity created, reset the malformed counter
+            malformedFragmentAttempts = 0;
 
             if (callback != null) {
                 logger.info("Executing callback with {}", val);
@@ -215,11 +167,5 @@ public class SimpleStream {
         }
 
         return entities;
-    }
-
-    public static void main(String args[]) throws StreamException {
-        SimpleStream stream = new SimpleStream();
-        stream.stream("{\"test\": \"this is ");
-        stream.stream("a test\"} [1,2,3]");
     }
 }

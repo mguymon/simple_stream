@@ -31,6 +31,7 @@ import org.junit.Test;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.junit.Assert.*;
@@ -120,6 +121,19 @@ public class SimpleStreamTest {
     }
 
     @Test
+    public void testMultipleLines() throws StreamException {
+        simpleStream.stream("{\n");
+        simpleStream.stream("  \"test\": true\n");
+        List entities =simpleStream.stream("}\n");
+        simpleStream.stream("[\n");
+        simpleStream.stream("  1, 2, 3\n");
+        entities.addAll(simpleStream.stream("]"));
+
+        Map<String, Boolean> expectedEntity  = ImmutableMap.of("test", true);
+        assertEquals(Arrays.asList(expectedEntity, Arrays.asList(1L, 2L, 3L)), entities);
+    }
+
+    @Test
     public void testEmptyStream() throws StreamException {
         List entities = simpleStream.stream("");
 
@@ -147,5 +161,11 @@ public class SimpleStreamTest {
         assertEquals(expectedEntity, entities.get(0));
 
         assertEquals(Arrays.asList(1L,2L,3L), entities.get(1));
+    }
+
+    @Test(expected=StreamException.class)
+    public void testMalformedFragment() throws StreamException {
+        simpleStream.stream("{cabbage, knicks, ");
+        simpleStream.stream("it hasnt got a beck}");
     }
 }
