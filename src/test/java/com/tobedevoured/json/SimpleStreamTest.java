@@ -76,6 +76,7 @@ public class SimpleStreamTest {
         });
 
         simpleStream.streamFromUrl("http://localhost:8089/test", 30);
+        simpleStream.flush();
 
         Map<String, Boolean> test = ImmutableMap.of("test", true);
         assertEquals(results, test);
@@ -83,8 +84,9 @@ public class SimpleStreamTest {
 
     @Test
     public void testFragmentedString() throws StreamException {
-        List entities = simpleStream.stream("{\"test\": \"this is ");
-        entities.addAll(simpleStream.stream("a test\"} [1,2,3]"));
+        simpleStream.stream("{\"test\": \"this is ");
+        simpleStream.stream("a test\"} [1,2,3]");
+        List entities = simpleStream.flush();
 
         Map<String, String> test = ImmutableMap.of("test", "this is a test");
         assertEquals(test, entities.get(0));
@@ -95,7 +97,9 @@ public class SimpleStreamTest {
     @Test
     public void testFragmentedArray() throws StreamException {
         simpleStream.stream("{\"cursor\": \"123\", \"check\": [1,2");
-        List entities = simpleStream.stream(",3]}");
+        simpleStream.stream(",3]}");
+
+        List entities = simpleStream.flush();
 
         JSONObject map = ((JSONObject)entities.get(0));
         assertEquals("123", map.get("cursor"));
@@ -105,7 +109,8 @@ public class SimpleStreamTest {
     @Test
     public void testFragmentedBoolean() throws StreamException {
         simpleStream.stream("{\"cursor\": \"123\", \"starred\": fals");
-        List entities = simpleStream.stream("e}");
+        simpleStream.stream("e}");
+        List entities = simpleStream.flush();
 
         Map<String, Object> expectedEntity  = ImmutableMap.of("cursor", "123", "starred", false);
         assertEquals(expectedEntity, entities.get(0));
@@ -114,7 +119,8 @@ public class SimpleStreamTest {
     @Test
     public void testFragmentedInteger() throws StreamException {
         simpleStream.stream("{\"cursor\": \"123\", \"amount\": 123");
-        List entities = simpleStream.stream("4}");
+        simpleStream.stream("4}");
+        List entities = simpleStream.flush();
 
         Map<String, Object> expectedEntity  = ImmutableMap.of("cursor", "123", "amount", 1234L);
         assertEquals(expectedEntity, entities.get(0));
@@ -124,10 +130,12 @@ public class SimpleStreamTest {
     public void testMultipleLines() throws StreamException {
         simpleStream.stream("{\n");
         simpleStream.stream("  \"test\": true\n");
-        List entities =simpleStream.stream("}\n");
+        simpleStream.stream("}\n");
         simpleStream.stream("[\n");
         simpleStream.stream("  1, 2, 3\n");
-        entities.addAll(simpleStream.stream("]"));
+        simpleStream.stream("]");
+
+        List entities = simpleStream.flush();
 
         Map<String, Boolean> expectedEntity  = ImmutableMap.of("test", true);
         assertEquals(Arrays.asList(expectedEntity, Arrays.asList(1L, 2L, 3L)), entities);
@@ -153,7 +161,8 @@ public class SimpleStreamTest {
             }
         });
 
-        List entities = simpleStream.stream("{\"test\": \"this is a test\"} [1,2,3]");
+        simpleStream.stream("{\"test\": \"this is a test\"} [1,2,3]");
+        List entities = simpleStream.flush();
 
         assertTrue("callback was called", isCalledBack.get());
 
@@ -167,5 +176,19 @@ public class SimpleStreamTest {
     public void testMalformedFragment() throws StreamException {
         simpleStream.stream("{cabbage, knicks, ");
         simpleStream.stream("it hasnt got a beck}");
+        simpleStream.flush();
+    }
+
+    public void testBufferSize() throws StreamException {
+        simpleStream = new SimpleStream(10);
+
+        List entities = simpleStream.stream("{\"mark\": 1}");
+
+        Map<String, Long> expectedEntity  = ImmutableMap.of("mark", 1L);
+        assertEquals(Arrays.asList(expectedEntity), entities);
+
+        entities = simpleStream.stream("{\"mark\": 9000}");
+
+        assertEquals(Arrays.asList(), entities);
     }
 }

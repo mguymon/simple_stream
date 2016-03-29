@@ -39,16 +39,34 @@ import java.util.function.Function;
 
 public class SimpleStream {
 
-    public static final int MAX_BUFFER_MALFORMED_FRAGMENTS = 1;
     private static final Logger logger = LoggerFactory.getLogger(SimpleStream.class);
+    public static final int MAX_BUFFER_MALFORMED_FRAGMENTS = 1;
+    public static final int DEFAULT_BUFFER_SIZE = 8092;
+    public static final List EMPTY_LIST = new ArrayList();
 
-    StringBuilder buffer = new StringBuilder();
+    StringBuilder buffer;
     Function<Object, Object> callback;
-    int malformedFragmentAttempts = 0;
+    int bufferSize;
+
+    int malformedFragmentAttempts = 1;
+
+    public SimpleStream() {
+        this(DEFAULT_BUFFER_SIZE);
+    }
+
+
+    public SimpleStream(int bufferSize) {
+        this.bufferSize = bufferSize;
+        buffer = new StringBuilder(bufferSize);
+    }
 
     public void reset() {
         buffer = new StringBuilder();
         malformedFragmentAttempts = 0;
+    }
+
+    public List flush() throws StreamException {
+       return processBuffer(0);
     }
 
     public void setCallback(Function<Object, Object> callback) {
@@ -101,18 +119,27 @@ public class SimpleStream {
     }
 
     public List stream(final String stream) throws StreamException {
-        JSONParser parser = new JSONParser();
-        JsonStreamHandler streamHandler = new JsonStreamHandler();
-
         if (buffer.length() > 0) {
             logger.info("Merging fragments {}||{}", buffer, stream);
         }
 
         buffer.append(stream);
 
+        if (buffer.length() >= bufferSize) {
+            return processBuffer(MAX_BUFFER_MALFORMED_FRAGMENTS);
+        }
+
+        return EMPTY_LIST;
+    }
+
+    public List processBuffer(int allowedMalformedAttempts) throws StreamException {
+        JSONParser parser = new JSONParser();
+        JsonStreamHandler streamHandler = new JsonStreamHandler();
+
         List entities = new ArrayList();
 
         int pos = 0;
+
         while( pos < buffer.length() -1 ) {
             String fragment = buffer.substring(pos);
 
@@ -122,7 +149,7 @@ public class SimpleStream {
 
                 if (ParseException.ERROR_UNEXPECTED_CHAR == e.getErrorType()) {
                     // Check if should wait for more streaming json before declaring it malformed
-                    if (malformedFragmentAttempts < MAX_BUFFER_MALFORMED_FRAGMENTS) {
+                    if (malformedFragmentAttempts < allowedMalformedAttempts) {
                         malformedFragmentAttempts++;
                     } else {
                         throw new StreamException(e);
