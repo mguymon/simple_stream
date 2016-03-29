@@ -37,6 +37,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Simple Stream handler for JSON
+ */
 public class SimpleStream {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleStream.class);
@@ -50,30 +53,58 @@ public class SimpleStream {
 
     int malformedFragmentAttempts = 1;
 
+    /**
+     * Create instance with the default buffer size of 8092
+     */
     public SimpleStream() {
         this(DEFAULT_BUFFER_SIZE);
     }
 
-
+    /**
+     * Create instance with specific buffer size
+     *
+     * @param bufferSize int buffer size
+     */
     public SimpleStream(int bufferSize) {
         this.bufferSize = bufferSize;
         buffer = new StringBuilder(bufferSize);
     }
 
+    /**
+     * Resets the stream handler
+     */
     public void reset() {
-        buffer = new StringBuilder();
+        buffer = new StringBuilder(bufferSize);
         malformedFragmentAttempts = 0;
     }
 
+    /**
+     * Flush the buffer and return all valid entities
+     *
+     * @return List of json entities
+     * @throws StreamException
+     */
     public List flush() throws StreamException {
        return processBuffer(0);
     }
 
+    /**
+     * Callback to be executed when an entity is parsed
+     *
+     * @param callback Function<Object, Object>
+     */
     public void setCallback(Function<Object, Object> callback) {
         this.callback = callback;
     }
 
-    public void streamFromUrl(final String url, final Integer timeout) throws StreamException {
+    /**
+     * Stream JSON from url
+     *
+     * @param url String
+     * @param timeout int
+     * @throws StreamException
+     */
+    public void streamFromUrl(final String url, final int timeout) throws StreamException {
         logger.info("Streaming JSON from {}", url);
 
         CloseableHttpClient httpclient = HttpClients
@@ -118,6 +149,13 @@ public class SimpleStream {
         }
     }
 
+    /**
+     * Stream in json. When the buffer size is reached, the buffer is processed into json entities.
+     *
+     * @param stream String
+     * @return List
+     * @throws StreamException
+     */
     public List stream(final String stream) throws StreamException {
         if (buffer.length() > 0) {
             logger.info("Merging fragments {}||{}", buffer, stream);
@@ -132,6 +170,14 @@ public class SimpleStream {
         return EMPTY_LIST;
     }
 
+    /**
+     * Process the buffer into json entities. When allow for multiple attempts for malformed json, which
+     * can be caused by a json fragment in the stream.
+     *
+     * @param allowedMalformedAttempts int
+     * @return List
+     * @throws StreamException
+     */
     public List processBuffer(int allowedMalformedAttempts) throws StreamException {
         JSONParser parser = new JSONParser();
         JsonStreamHandler streamHandler = new JsonStreamHandler();
