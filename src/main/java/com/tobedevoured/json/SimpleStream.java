@@ -140,6 +140,9 @@ public class SimpleStream {
 
         int pos = 0;
 
+        // Check if the buffer is crammed to the brim
+        boolean bufferOverflow = buffer.length() > bufferSize;
+
         while( pos < buffer.length() -1 ) {
             String fragment = buffer.substring(pos);
 
@@ -191,6 +194,11 @@ public class SimpleStream {
             }
 
             entities.add(val);
+        }
+
+        // Compact the buffer after an overflow
+        if (buffer.length() < bufferSize && bufferOverflow) {
+            buffer.setLength(bufferSize);
         }
 
         return entities;
