@@ -82,7 +82,7 @@ public class SimpleStream {
      * Flush the buffer and return all valid entities
      *
      * @return List of json entities
-     * @throws StreamException
+     * @throws StreamException parser error
      */
     public List flush() throws StreamException {
        return processBuffer(0);
@@ -91,7 +91,7 @@ public class SimpleStream {
     /**
      * Callback to be executed when an entity is parsed
      *
-     * @param callback Function<Object, Object>
+     * @param callback Function
      */
     public void setCallback(Function<Object, Object> callback) {
         this.callback = callback;
@@ -102,22 +102,15 @@ public class SimpleStream {
      *
      * @param url String
      * @param timeout int
-     * @throws StreamException
+     * @throws StreamException parser error
      */
     public void streamFromUrl(final String url, final int timeout) throws StreamException {
         logger.info("Streaming JSON from {}", url);
 
         CloseableHttpClient httpclient = HttpClients
-                .custom()
-                .setKeepAliveStrategy(
-                    new ConnectionKeepAliveStrategy() {
-                        @Override
-                        public long getKeepAliveDuration(HttpResponse response, HttpContext context) {
-                            return timeout * 1000;
-                        }
-                    }
-                )
-                .build();
+            .custom()
+            .setKeepAliveStrategy((response, context) -> timeout * 1000)
+            .build();
 
         HttpGet httpget = new HttpGet(url);
 
@@ -130,12 +123,13 @@ public class SimpleStream {
                     BufferedReader reader =
                             new BufferedReader(new InputStreamReader(entity.getContent()));
                     try {
-                        String line = null;
+                        String line;
                         while ((line = reader.readLine( )) != null) {
                             logger.debug("Streaming line: {}", line);
                             stream(line);
                         }
                     } finally {
+                        flush();
                         reader.close();
                     }
                 }
@@ -154,7 +148,7 @@ public class SimpleStream {
      *
      * @param stream String
      * @return List
-     * @throws StreamException
+     * @throws StreamException parser error
      */
     public List stream(final String stream) throws StreamException {
         if (buffer.length() > 0) {
@@ -176,7 +170,7 @@ public class SimpleStream {
      *
      * @param allowedMalformedAttempts int
      * @return List
-     * @throws StreamException
+     * @throws StreamException parser error
      */
     public List processBuffer(int allowedMalformedAttempts) throws StreamException {
         JSONParser parser = new JSONParser();
